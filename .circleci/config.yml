@@ -1,0 +1,25 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/python:3.5.1
+    steps:
+      - checkout
+      - run: sudo apt-get update;
+      - run: sudo apt-get install rpm
+      - run: go get github.com/itchio/gothub
+      - run: pip3 install requests
+      - run: export NGINX_VERSION=$(grep Version ${CIRCLE_PROJECT_REPONAME}.spec|sed 's/^Version:[ ]*//') && wget -nv -O SOURCES/nginx-${NGINX_VERSION}.tar.gz http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz
+      - run: export NGINX_VERSION=$(grep Version ${CIRCLE_PROJECT_REPONAME}.spec|sed 's/^Version:[ ]*//') && wget -nv -O SOURCES/nginx-$NGINX_VERSION.tar.gz.asc http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz.asc
+
+  test:
+    docker:
+      - image: circleci/python:3.5.1
+    steps:
+      - checkout
+      - run: rpmbuild -bs --define "_topdir $(pwd)" ${CIRCLE_PROJECT_REPONAME}.spec
+      - run: mv SRPMS/*.src.rpm $CIRCLE_ARTIFACTS/
+      - run: echo "export srpm_filename=$(ls $CIRCLE_ARTIFACTS/*.src.rpm)" > srpm
+      - run: source srpm && echo "export srpm_version=$(python -c "import re; print(re.findall('([0-9]+.[0-9]+.[0-9]+-[0-9]+)', '${srpm_filename}')[0])")" >> srpm
+      - run: bash upload_to_github.sh
+      - run: source srpm && python3 copr_build.py ${srpm_filename}
